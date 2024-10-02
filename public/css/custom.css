@@ -1,0 +1,26 @@
+#question {
+    --angle: 0deg;
+    border: 10px solid;
+    padding: 2px;
+    /* This won't work: */
+    border-image: linear-gradient(var(--angle), red, yellow, lime, aqua, blue, magenta) 1;
+
+    animation: 10s rotate linear infinite;
+}
+
+.first-class{
+    display: none;
+}
+
+@keyframes rotate {
+    to {
+        --angle: 360deg;
+    }
+}
+
+@property --angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+}
+
