@@ -167,8 +167,11 @@ class ReportService
                             $common['closed_period']++;
                         }
                         if ($sid == 142) {
-                            $man[$user]['success_period']++;
-                            $common['success_period']++;
+                            if (Carbon::parse($lead->getClosedAt())->between(Carbon::parse($from_first), Carbon::parse($to_first)))
+                                {
+                                    $man[$user]['success_period']++;
+                                    $common['success_period']++;
+                                }
                         }
 
 
@@ -862,9 +865,10 @@ class ReportService
 
     public static function postSales()
     {
+        $apiClient = AmoService::getClient();
         $lf = new \AmoCRM\Filters\LeadsFilter();
         $lf->setPipelineIds([3338257]);
-        $lf->setCreatedAt((new \AmoCRM\Filters\BaseRangeFilter())->setFrom(\Carbon\Carbon::parse('01-01-2024 00:00')->timestamp)->setTo(\Carbon\Carbon::parse('01-09-2024 00:00')->timestamp));
+        $lf->setCreatedAt((new \AmoCRM\Filters\BaseRangeFilter())->setFrom(\Carbon\Carbon::parse('01-01-2024 00:00')->timestamp)->setTo(\Carbon\Carbon::parse('01-11-2024 00:00')->timestamp));
         $lf->setLimit(200);
         $i = 1;
         $clients = 0;
@@ -891,7 +895,13 @@ class ReportService
                 if ($lead->getContacts())
                 {
                     $clients+=$lead->getContacts()->count();
-                    $clientsPeriod[Carbon::parse($lead->created_at)->format('F')]+=$lead->getContacts()->count();
+                    if (isset($clientsPeriod[Carbon::parse($lead->created_at)->format('F')]))
+                    {
+                        $clientsPeriod[Carbon::parse($lead->created_at)->format('F')]+=$lead->getContacts()->count();
+                    } else
+                    {
+                        $clientsPeriod[Carbon::parse($lead->created_at)->format('F')]=$lead->getContacts()->count();
+                    }
                 }
 
             }
@@ -903,11 +913,14 @@ class ReportService
         }
 
         $sellPeriod = [];
-        $sell = [];
+        $sell = [
+            'count' => 0,
+            'price' => 0
+        ];
 
         $lf = new \AmoCRM\Filters\LeadsFilter();
         $lf->setPipelineIds([5234134]);
-        $lf->setClosedAt((new \AmoCRM\Filters\BaseRangeFilter())->setFrom(\Carbon\Carbon::parse('01-01-2024 00:00')->timestamp)->setTo(\Carbon\Carbon::parse('01-09-2024 00:00')->timestamp));
+        $lf->setClosedAt((new \AmoCRM\Filters\BaseRangeFilter())->setFrom(\Carbon\Carbon::parse('01-01-2024 00:00')->timestamp)->setTo(\Carbon\Carbon::parse('01-11-2024 00:00')->timestamp));
         $lf->setLimit(200);
         $i = 1;
         while (true) {
@@ -918,8 +931,17 @@ class ReportService
                 {
                     $sell['count']+=1;
                     $sell['price']+=$lead->getPrice();
-                    $sellPeriod[Carbon::parse($lead->created_at)->format('F')]['count']+=1;
-                    $sellPeriod[Carbon::parse($lead->created_at)->format('F')]['price']+=$lead->getPrice();
+                    if (isset($sellPeriod[Carbon::parse($lead->getClosedAt())->format('F')]))
+                    {
+                        $sellPeriod[Carbon::parse($lead->getClosedAt())->format('F')]['count']+=1;
+                        $sellPeriod[Carbon::parse($lead->getClosedAt())->format('F')]['price']+=$lead->getPrice();
+                    }
+                    else
+                    {
+                        $sellPeriod[Carbon::parse($lead->getClosedAt())->format('F')]['count']=1;
+                        $sellPeriod[Carbon::parse($lead->getClosedAt())->format('F')]['price']=$lead->getPrice();
+                    }
+
                 }
 
 
@@ -932,9 +954,72 @@ class ReportService
         }
 
         $all = $prices = [];
+        $all = [
+            '01' => 0,
+            '02' => 0,
+            '03' => 0,
+            '04' => 0,
+            '05' => 0,
+            '06' => 0,
+            '07' => 0,
+            '08' => 0,
+            '09' => 0,
+            '10' => 0,
+        ];
         foreach ($clientsPeriod as $month => $data)
         {
-            $all[$month] = $sellPeriod[$month]['count'] / $data;
+            $all[Carbon::parse($month)->format('m')] = $sellPeriod[$month]['count'] / $data;
         }
+        $sales = [
+            '01' => [],
+            '02' => [],
+            '03' => [],
+            '04' => [],
+            '05' => [],
+            '06' => [],
+            '07' => [],
+            '08' => [],
+            '09' => [],
+            "10" => [],
+        ];
+        foreach ($sellPeriod as $month => $item)
+        {
+            if (!isset($clientsPeriod[$month])) continue;
+            $sales[Carbon::parse($month)->format('m')] = [
+              'count' => $item['count'],
+              'price' => $item['price'],
+              'Month' => $month,
+              'clients' =>   $clientsPeriod[$month]
+            ];
+        }
+        return json_encode([
+           'all' => $all,
+            'sales' => $sales
+        ]);
+    }
+
+
+    public static function YearReport()
+    {
+        $apiClient = AmoService::getClient();
+        $lf = new \AmoCRM\Filters\LeadsFilter();
+        $lf->setCreatedAt((new \AmoCRM\Filters\BaseRangeFilter())->setFrom(\Carbon\Carbon::parse('01-09-2023 00:00')->timestamp)->setTo(\Carbon\Carbon::parse('01-10-2024 00:00')->timestamp));
+        $lf->setLimit(200);
+        $i = 1;
+        $co = 0;
+        $lf->setPipelineIds([Pipelines::RETAIL, Pipelines::DEFFERED, Pipelines::SPAM]);
+        $clients = 0;
+        $clientsPeriod = [];
+        while (true) {
+            $tmp = $apiClient->leads()->get($lf, [LeadModel::CONTACTS]);
+
+            $i++;
+            $co+=$tmp->count();
+            $lf->setPage($i);
+            if ($tmp->count() < 200) {
+                break;
+            }
+        }
+        dd($co);
     }
 }

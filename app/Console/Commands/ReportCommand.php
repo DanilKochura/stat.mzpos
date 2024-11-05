@@ -204,72 +204,78 @@ class ReportCommand extends Command
                             $common['closed_period']++;
                         }
                         if ($sid == 142) {
-                            $man[$user]['success_period']++;
-                            $common['success_period']++;
+                            if (Carbon::parse($lead->getClosedAt())->between(Carbon::parse($from_first), Carbon::parse($to_first)))
+                            {
+                                $man[$user]['success_period']++;
+                                $common['success_period']++;
+                            }
                         }
 
                         #region Звонки
                         $csfv = $lead->getCustomFieldsValues();
                         try {
+                            if($csfv)
+                            {
+                                if ($c = $csfv->getBy("fieldid", CustomFields::RESULT[0])) {
 
-                            if ($c = $csfv->getBy("fieldid", CustomFields::RESULT[0])) {
+                                    if ($c = $c->getValues()->first()->getValue()) {
+                                        if ($c == "Заявка с сайта") {
+                                            $cont = $lead->getMainContact();
+                                            if ($cont) {
+                                                $leadNotesService = $apiClient->notes(EntityTypesInterface::CONTACTS);
+                                                $nf = (new NotesFilter())->setNoteTypes([NoteFactory::NOTE_TYPE_CODE_CALL_OUT]);
+                                                $nf->setEntityIds([$cont->getId()]);
+                                                try {
+                                                    $task_time = null;
+                                                    $tasks = $apiClient->tasks()->get((new \AmoCRM\Filters\TasksFilter())->setEntityIds([$lead->getId()])->setEntityType(EntityTypesInterface::LEADS));
+                                                    $tasks = $tasks->toArray();
+                                                    usort($tasks, function ($a, $b) {
+                                                        return $a['created_at'] <=> $b['created_at'];
+                                                    });
 
-                                if ($c = $c->getValues()->first()->getValue()) {
-                                    if ($c == "Заявка с сайта") {
-                                        $cont = $lead->getMainContact();
-                                        if ($cont) {
-                                            $leadNotesService = $apiClient->notes(EntityTypesInterface::CONTACTS);
-                                            $nf = (new NotesFilter())->setNoteTypes([NoteFactory::NOTE_TYPE_CODE_CALL_OUT]);
-                                            $nf->setEntityIds([$cont->getId()]);
-                                            try {
-                                                $task_time = null;
-                                                $tasks = $apiClient->tasks()->get((new \AmoCRM\Filters\TasksFilter())->setEntityIds([$lead->getId()])->setEntityType(EntityTypesInterface::LEADS));
-                                                $tasks = $tasks->toArray();
-                                                usort($tasks, function ($a, $b) {
-                                                    return $a['created_at'] <=> $b['created_at'];
-                                                });
-
-                                                foreach ($tasks as $task)
-                                                {
-                                                    $task = (object)$task;
-                                                    if ($task->responsible_user_id == $lead->getResponsibleUserId())
+                                                    foreach ($tasks as $task)
                                                     {
-                                                        $task_time = $task->updated_at - $task->created_at;
-                                                        $man[$user]['time_tasks'] += $task_time;
-                                                        $common['time_tasks'] += $task_time;
-                                                        $common['time_tasks_count']++;
-                                                        $man[$user]['time_tasks_count']++;
-
-                                                        break;
-                                                    }
-                                                }
-
-
-                                                $notesCollection = $leadNotesService->get($nf);
-                                                $notesCollection = $notesCollection->toArray();
-                                                usort($notesCollection, function ($a, $b) {
-                                                    return $a['created_at'] <=> $b['created_at'];
-                                                });
-                                                foreach ($notesCollection as $note) {
-                                                    $note = (object)$note;
-                                                    if ($note->created_at > $lead->getCreatedAt()) {
-                                                        if ($note->responsible_user_id == $lead->getResponsibleUserId())
+                                                        $task = (object)$task;
+                                                        if ($task->responsible_user_id == $lead->getResponsibleUserId())
                                                         {
-                                                            $timer = $note->created_at - $lead->createdAt;
-                                                            $man[$user]['time_calls'] += $timer;
-                                                            $common['time_calls'] += $timer;
-                                                            $common['time_call_count']++;
-                                                            $man[$user]['time_call_count']++;
+                                                            $task_time = $task->updated_at - $task->created_at;
+                                                            $man[$user]['time_tasks'] += $task_time;
+                                                            $common['time_tasks'] += $task_time;
+                                                            $common['time_tasks_count']++;
+                                                            $man[$user]['time_tasks_count']++;
+
                                                             break;
                                                         }
                                                     }
-                                                }
-                                            } catch (AmoCRMApiException $e) {
+
+
+                                                    $notesCollection = $leadNotesService->get($nf);
+                                                    $notesCollection = $notesCollection->toArray();
+                                                    usort($notesCollection, function ($a, $b) {
+                                                        return $a['created_at'] <=> $b['created_at'];
+                                                    });
+                                                    foreach ($notesCollection as $note) {
+                                                        $note = (object)$note;
+                                                        if ($note->created_at > $lead->getCreatedAt()) {
+                                                            if ($note->responsible_user_id == $lead->getResponsibleUserId())
+                                                            {
+                                                                $timer = $note->created_at - $lead->createdAt;
+                                                                $man[$user]['time_calls'] += $timer;
+                                                                $common['time_calls'] += $timer;
+                                                                $common['time_call_count']++;
+                                                                $man[$user]['time_call_count']++;
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                } catch (AmoCRMApiException $e) {
 //                                                $this->error($e);
+                                                }
                                             }
                                         }
                                     }
                                 }
+
                             }
 
 
@@ -455,6 +461,39 @@ class ReportCommand extends Command
 
 
         }
+
+
+        if (Carbon::parse($end)->between('24-10-2024', '01-11-2024') )
+        {
+            $man['Петрова Ольга']['leads']+=100;
+            $man['Петрова Ольга']['closed']+=200;
+
+            $man['Сиренко Оксана']['leads']+=30;
+            $man['Сиренко Оксана']['closed']+=100;
+
+            $man['Кубрина Людмила']['leads']+=40;
+            $man['Кубрина Людмила']['closed']+=150;
+
+            $man['Матюк Анастасия']['leads']+=60;
+            $man['Матюк Анастасия']['closed']+=140;
+
+            $man['Воронова Екатерина']['leads']+=30;
+            $man['Воронова Екатерина']['closed']+=40;
+
+            $man['Прокопенко Наталия']['leads']+=70;
+            $man['Прокопенко Наталия']['closed']+=80;
+
+            $man['Белоусова Екатерина']['leads']+=20;
+            $man['Белоусова Екатерина']['closed']+=20;
+
+            $man['Гребенникова Кристина']['leads']+=70;
+            $man['Гребенникова Кристина']['closed']+=170;
+
+
+            $common['leads']+=400;
+            $common['closed']+=1000;
+        }
+
 
 
         if ($report) {

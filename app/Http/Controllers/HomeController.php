@@ -34,8 +34,7 @@ class HomeController extends Controller
         $from_first = str_replace('/', '-', trim($first[0], ' +'));
         $to_first = str_replace('/', '-', trim($first[1], ' +'));
         $result = ReportService::report($from_first, $to_first, $hard);
-        if (isset($validated['second_period']))
-        {
+        if (isset($validated['second_period'])) {
             $second_period = $validated['second_period'];
             $second = explode('-', $second_period);
             $from_second = str_replace('/', '-', trim($second[0], ' +'));
@@ -77,9 +76,8 @@ class HomeController extends Controller
             $to_first = str_replace('/', '-', trim($first[1], ' +'));
 
             //region Common
-            $object = Report::where('date_from' , Carbon::parse($from_first))->where('date_to', Carbon::parse($to_first))->get()->first();
-            if($object)
-            {
+            $object = Report::where('date_from', Carbon::parse($from_first))->where('date_to', Carbon::parse($to_first))->get()->first();
+            if ($object) {
                 $objects = json_decode($object->json, true);
                 $closed = $success = $bill = $spam = $work = $korp = [];
 
@@ -112,22 +110,20 @@ class HomeController extends Controller
                     'spam' => $spam,
                     'work' => $work,
                     'korp' => $korp,
-                    'pages' =>$pages,
+                    'pages' => $pages,
                     'labelsPages' => $labelsPages,
                     'prefs' => $prefs,
                     'labelsPrefs' => $labelsPrefs
                 ];
                 #region Conversion
-                $conv = ReportConversion::where('date_from' , Carbon::parse($from_first))->where('date_to', Carbon::parse($to_first))->get()->first();
-                if ($conv)
-                {
+                $conv = ReportConversion::where('date_from', Carbon::parse($from_first))->where('date_to', Carbon::parse($to_first))->get()->first();
+                if ($conv) {
                     $conversions = json_decode($conv->json, true);
                 }
             }
             #endregion
 
-        } else
-        {
+        } else {
             $first = [Carbon::yesterday()->startOfMonth()->format('d/m/Y'), Carbon::yesterday()->format('d/m/Y')];
         }
 
@@ -182,23 +178,23 @@ class HomeController extends Controller
                     $conversions2 = json_decode($conv2->json, true);
                 }
             }
-        }else
-        {
+        } else {
             $second = [Carbon::yesterday()->startOfMonth()->format('d/m/Y'), Carbon::yesterday()->format('d/m/Y')];
 
         }
 
 
-        $postsales = collect(json_decode('{"all":{"01":0.19198312236286919,"02":0.20496894409937888,"03":0.22888283378746593,"04":0.24,"05":0.3064327485380117,"06":0.33900226757369617,"07":0.3611859838274933,"08":0.2923076923076923},"sales":{"02":{"count":231,"price":2359920,"Month":"February","clients":1127},"01":{"count":182,"price":1918733,"Month":"January","clients":948},"03":{"count":252,"price":2726160,"Month":"March","clients":1101},"04":{"count":246,"price":2711900,"Month":"April","clients":1025},"05":{"count":262,"price":2870825,"Month":"May","clients":855},"06":{"count":299,"price":3212530,"Month":"June","clients":882},"07":{"count":268,"price":2642698,"Month":"July","clients":742},"08":{"count":266,"price":3183770,"Month":"August","clients":910}}}', true));
+        $postsales = collect(json_decode('{"all":{"01":0.22257383966244726,"02":0.22803904170363798,"03":0.23251589464123523,"04":0.2653658536585366,"05":0.3064327485380117,"06":0.2891156462585034,"07":0.4056603773584906,"08":0.22417582417582418,"09":0.2638580931263858,"10":0.1761612620508326},"sales":{"01":{"count":211,"price":2329820,"Month":"January","clients":948},"02":{"count":257,"price":2608510,"Month":"February","clients":1127},"03":{"count":256,"price":2839555,"Month":"March","clients":1101},"04":{"count":272,"price":2863425,"Month":"April","clients":1025},"05":{"count":262,"price":2624185,"Month":"May","clients":855},"06":{"count":255,"price":2986070,"Month":"June","clients":882},"07":{"count":301,"price":3220453,"Month":"July","clients":742},"08":{"count":204,"price":2490115,"Month":"August","clients":910},"09":{"count":238,"price":2972910,"Month":"September","clients":902},"10":{"count":201,"price":2424970,"Month":"October","clients":1141}}}', true));
 
 //        dd(collect($postsales['sales'])->pluck('Month'));
         error_reporting(E_ERROR);
+        $postsales['sales']["10"] = $postsales['sales'][10];
         return view('home', compact('first', 'second', 'compare', 'objects', 'objects2', 'conversions', 'postsales'));
     }
+
     public function managers($first = null, $second = null)
     {
-        if (!isset($_GET['token']) or ($_GET['token'] != 'fgEvcEWkc'  and time() - $_GET['token'] > 100 ) )
-        {
+        if (!isset($_GET['token']) or ($_GET['token'] != 'fgEvcEWkc' and time() - $_GET['token'] > 100)) {
             abort(419);
         }
         $objects = $objects2 = $conversions = $conversions2 = $compare = null;
@@ -208,9 +204,8 @@ class HomeController extends Controller
             $to_first = str_replace('/', '-', trim($first[1], ' +'));
 
             //region Common
-            $object = Report::where('date_from' , Carbon::parse($from_first))->where('date_to', Carbon::parse($to_first))->get()->first();
-            if($object)
-            {
+            $object = Report::where('date_from', Carbon::parse($from_first))->where('date_to', Carbon::parse($to_first))->get()->first();
+            if ($object) {
                 $objects = json_decode($object->json, true);
                 $closed = $success = $bill = $spam = $work = $korp = [];
 
@@ -243,22 +238,20 @@ class HomeController extends Controller
                     'spam' => $spam,
                     'work' => $work,
                     'korp' => $korp,
-                    'pages' =>$pages,
+                    'pages' => $pages,
                     'labelsPages' => $labelsPages,
                     'prefs' => $prefs,
                     'labelsPrefs' => $labelsPrefs
                 ];
                 #region Conversion
-                $conv = ReportConversion::where('date_from' , Carbon::parse($from_first))->where('date_to', Carbon::parse($to_first))->get()->first();
-                if ($conv)
-                {
+                $conv = ReportConversion::where('date_from', Carbon::parse($from_first))->where('date_to', Carbon::parse($to_first))->get()->first();
+                if ($conv) {
                     $conversions = json_decode($conv->json, true);
                 }
             }
             #endregion
 
-        } else
-        {
+        } else {
             $first = [Carbon::yesterday()->startOfMonth()->format('d/m/Y'), Carbon::yesterday()->format('d/m/Y')];
         }
 

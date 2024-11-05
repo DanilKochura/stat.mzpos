@@ -37,7 +37,11 @@ Route::get('/tesst', function (){
     return view('test');
 
 });
-
+Route::get('/postSales', [\App\UseCases\ReportService::class, 'postSales']);
+Route::get('/post', function (){
+   return view('_postsales');
+});
+Route::get('/year', [\App\UseCases\ReportService::class, 'YearReport']);
 //
 //Route::post('/main', function (\Illuminate\Support\Facades\Request $request){
 //   \Illuminate\Support\Facades\Log::info(print_r($request, 1));
