@@ -46,6 +46,7 @@ class ReportCommand extends Command
     {
 
         error_reporting(E_ERROR);
+        \Illuminate\Support\Facades\Log::info('test');
         $start_time = microtime(true);
         $start = $this->argument('start');
         $end = $this->argument('end');
@@ -204,10 +205,34 @@ class ReportCommand extends Command
                             $common['closed_period']++;
                         }
                         if ($sid == 142) {
-                            if (Carbon::parse($lead->getClosedAt())->between(Carbon::parse($from_first), Carbon::parse($to_first)))
+                            if (Carbon::parse($lead->getClosedAt())->between(Carbon::parse($from_first.' 00:00'), Carbon::parse($to_first.' 23:59')))
                             {
                                 $man[$user]['success_period']++;
                                 $common['success_period']++;
+                            }
+                        }
+                        if ($sid == 32533201 or $sid == 32533204)
+                        {
+                            $leadNotesService = $apiClient->events();
+
+                            $ef = new \AmoCRM\Filters\EventsFilter();
+                            $ef->setEntity([EntityTypesInterface::LEADS])->setEntityIds([$lead->getId()])->setTypes(['lead_status_changed']);
+                            try {
+                                $events = $apiClient->events()->get($ef);
+                                foreach ($events as $e) {
+                                    /** @var \AmoCRM\Models\EventModel $e */
+                                    if (in_array($e->getValueAfter()[0]['lead_status']['id'], [32533201, 32533204])) {
+                                        if (Carbon::parse($e->getCreatedAt())->between(Carbon::parse($from_first.' 00:00'), Carbon::parse($to_first. '23:59')))
+                                        {
+                                            $man[$user]['success_period']++;
+                                            $common['success_period']++;
+                                            ReportTrait::incrementOrSet($man[$user]['partly_payed']);
+                                            ReportTrait::incrementOrSet($common['partly_payed']);
+                                            break;
+                                        }
+                                    }
+                                }
+                            } catch (Exception $exception) {
                             }
                         }
 
@@ -290,13 +315,16 @@ class ReportCommand extends Command
                         $salesT[$user][date('d M', $lead->createdAt)]['new']++;
 
                     }
-
+                    else {
+                        $this->warn($lead->getId());
+                    }
                 }
             }
             $time_end = microtime(true);
             $this->info('page - '.$i.', count: '.$tmp->count().', connection time: '.$time_сonn.' time: '.($time_end - $time_start)/60);
 
             $i++;
+
             $lf->setPage($i);
             if ($tmp->count() < 200) {
                 break;
@@ -304,13 +332,15 @@ class ReportCommand extends Command
 
         }
         $lf2 = new LeadsFilter();
-        $lf2->setClosedAt((new \AmoCRM\Filters\BaseRangeFilter())->setFrom(\Carbon\Carbon::parse($from_first)->timestamp)->setTo(\Carbon\Carbon::parse($to_first . ' 23:59')->timestamp));
+        $lf2->setClosedAt((new \AmoCRM\Filters\BaseRangeFilter())->setFrom(\Carbon\Carbon::parse($from_first . '00:00')->timestamp)->setTo(\Carbon\Carbon::parse($to_first . ' 23:59')->timestamp));
         $lf2->setLimit(200);
         $i = 1;
         $pr = 40;
 
         $this->info('sevond step!');
 
+
+        $testing = [0,0];
         while (true) {
             $time_start = microtime(true);
             $tmp = $apiClient->leads()->get($lf2);
@@ -397,54 +427,68 @@ class ReportCommand extends Command
                         }
                         elseif ($lead->getStatusId() == 143) {
                             $csfv = $lead->getCustomFieldsValues();
+                            $po_vopr_obuch = false;
+
                             if (!$csfv) {
                                 $salesT[$user][date('d M', $lead->closedAt)]['closed']++;
                                 $man[$user]['closed']++;
                                 $common['closed']++;
                             } else {
                                 $cn = $csfv->getBy("fieldid", 644641);
-                                $po_vopr_obuch = false;
                                 if ($cn) {
                                     try {
                                         $cn = $cn->getValues()->first()->getValue();
                                         $man[$user]['necelevoy'][$cn]++;
                                         $common['necelevoy'][$cn]++;
-                                        if ($cn == 'Слушатель по вопросу обучения') {
+                                        if (trim($cn) == 'Слушатель по вопросу обучения') {
+                                            $salesT[$user][date('d M', $lead->closedAt)]['closed']++;
+                                            $man[$user]['closed']++;
+                                            $common['closed']++;
                                             $po_vopr_obuch = true;
+                                            $man[$user]['overload']++;
+                                            $common['overload']++;
+                                            $man[$user]['reasons']["Слушатель по вопросу обучения"] = isset($man[$user]['reasons']["Слушатель по вопросу обучения"]) ? $man[$user]['reasons']["Слушатель по вопросу обучения"] + 1 : 0;
+                                            $common['reasons']["Слушатель по вопросу обучения"] = isset($common['reasons']["Слушатель по вопросу обучения"]) ? $common['reasons']["Слушатель по вопросу обучения"] + 1 : 0;
+
                                         }
                                     } catch (Exception $e) {
                                     }
                                 }
-                                if ($c = $csfv->getBy("fieldid", 644039)) {
-                                    try {
-                                        if ($c = $c->getValues()->first()->getValue()) {
-                                            $man[$user]['reasons'][$c]++;
-                                            $common['reasons'][$c]++;
-                                            if (!in_array($c, ['Дубль', 'Ошиблись номером', 'Уже обучается']) and !$po_vopr_obuch) {
-                                                $salesT[$user][date('d M', $lead->closedAt)]['closed']++;
-                                                $man[$user]['closed']++;
-                                                $common['closed']++;
-                                            } else {
-                                                $man[$user]['overload']++;
-                                                $common['overload']++;
-                                                $man[$user]['closed_types'][$c]++;
-                                                $common['closed_types'][$c]++;
+                                if (!$po_vopr_obuch) {
+                                    if ($c = $csfv->getBy("fieldid", 644039)) {
+                                        try {
+                                            if ($c = $c->getValues()->first()->getValue()) {
+                                                $man[$user]['reasons'][$c]++;
+                                                $common['reasons'][$c]++;
+                                                if (!in_array($c, ['Дубль', 'Ошиблись номером', 'Уже обучается'])) {
+                                                    $salesT[$user][date('d M', $lead->closedAt)]['closed']++;
+                                                    $man[$user]['closed']++;
+                                                    $common['closed']++;
+                                                } else {
+
+                                                    $man[$user]['overload']++;
+                                                    $common['overload']++;
+                                                    $man[$user]['closed_types'][$c]++;
+                                                    $common['closed_types'][$c]++;
+                                                }
                                             }
+                                        } catch (Exception $e) {
+                                            $salesT[$user][date('d M', $lead->closedAt)]['closed']++;
+                                            $man[$user]['closed']++;
+                                            $common['closed']++;
                                         }
-                                    } catch (Exception $e) {
+
+                                    } else {
+
+                                        $man[$user]['reasons']["Без причины"] = isset($man[$user]['reasons']["Без причины"]) ? $man[$user]['reasons']["Без причины"] + 1 : 0;
+                                        $common['reasons']["Без причины"] = isset($common['reasons']["Без причины"]) ? $common['reasons']["Без причины"] + 1 : 0;
                                         $salesT[$user][date('d M', $lead->closedAt)]['closed']++;
                                         $man[$user]['closed']++;
                                         $common['closed']++;
                                     }
-
-                                } else {
-                                    $man[$user]['reasons']["Без причины"] = isset($man[$user]['reasons']["Без причины"]) ? $man[$user]['reasons']["Без причины"] + 1 : 0;
-                                    $common['reasons']["Без причины"] = isset($common['reasons']["Без причины"]) ? $common['reasons']["Без причины"] + 1 : 0;
-                                    $salesT[$user][date('d M', $lead->closedAt)]['closed']++;
-                                    $man[$user]['closed']++;
-                                    $common['closed']++;
                                 }
                             }
+
 
 
                         }
@@ -463,38 +507,36 @@ class ReportCommand extends Command
         }
 
 
-        if (Carbon::parse($end)->between('24-10-2024', '01-11-2024') )
-        {
-            $man['Петрова Ольга']['leads']+=100;
-            $man['Петрова Ольга']['closed']+=200;
-
-            $man['Сиренко Оксана']['leads']+=30;
-            $man['Сиренко Оксана']['closed']+=100;
-
-            $man['Кубрина Людмила']['leads']+=40;
-            $man['Кубрина Людмила']['closed']+=150;
-
-            $man['Матюк Анастасия']['leads']+=60;
-            $man['Матюк Анастасия']['closed']+=140;
-
-            $man['Воронова Екатерина']['leads']+=30;
-            $man['Воронова Екатерина']['closed']+=40;
-
-            $man['Прокопенко Наталия']['leads']+=70;
-            $man['Прокопенко Наталия']['closed']+=80;
-
-            $man['Белоусова Екатерина']['leads']+=20;
-            $man['Белоусова Екатерина']['closed']+=20;
-
-            $man['Гребенникова Кристина']['leads']+=70;
-            $man['Гребенникова Кристина']['closed']+=170;
-
-
-            $common['leads']+=400;
-            $common['closed']+=1000;
-        }
-
-
+//        if (Carbon::parse($end)->between('24-10-2024', '01-11-2024') )
+//        {
+//            $man['Петрова Ольга']['leads']+=100;
+//            $man['Петрова Ольга']['closed']+=200;
+//
+//            $man['Сиренко Оксана']['leads']+=30;
+//            $man['Сиренко Оксана']['closed']+=100;
+//
+//            $man['Кубрина Людмила']['leads']+=40;
+//            $man['Кубрина Людмила']['closed']+=150;
+//
+//            $man['Матюк Анастасия']['leads']+=60;
+//            $man['Матюк Анастасия']['closed']+=140;
+//
+//            $man['Воронова Екатерина']['leads']+=30;
+//            $man['Воронова Екатерина']['closed']+=40;
+//
+//            $man['Прокопенко Наталия']['leads']+=70;
+//            $man['Прокопенко Наталия']['closed']+=80;
+//
+//            $man['Белоусова Екатерина']['leads']+=20;
+//            $man['Белоусова Екатерина']['closed']+=20;
+//
+//            $man['Гребенникова Кристина']['leads']+=70;
+//            $man['Гребенникова Кристина']['closed']+=170;
+//
+//
+//            $common['leads']+=400;
+//            $common['closed']+=1000;
+//        }
 
         if ($report) {
             $report->update([

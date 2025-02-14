@@ -120,6 +120,7 @@
                                     'Новых лидов за период' => 'leads',
                                     'Из них нерелевантно (Дубль, Ошиблись номером)' => 'overload',
                                     'Из них успешно' => 'success_period',
+                                    'В т.ч. предоплат и оплат' => 'partly_payed',
                                     'Из них не реализовано' => 'closed_period',
                                     'Отложено' => 'deffered',
                                     'Продано на сумму' => 'sell',
@@ -282,6 +283,7 @@
                                     <th>Новых лидов за период</th>
                                     <th>Из них нерелевантно (Дубль, Ошиблись номером)</th>
                                     <th>Из них успешно</th>
+                                    <th>В т.ч. предоплат</th>
                                     <th>Из них не реализовано</th>
                                     <th>Отложено</th>
                                     <th>Всего успешно</th>
@@ -294,7 +296,7 @@
                                     <?php foreach ($conversions['man'] as $name => $user): ?>
                                 <tr>
                                     <td>{{ $name }}</td>
-                                    @if($user['leads'] > 0)
+                                    @if($user['leads'] > 0 and $user['leads'] > $user['overload'])
                                         <td>{{ round($user['success_period'] / ($user['leads'] - $user['overload']) * 100, 1) }}</td>
                                     @else
                                         <td>0</td>
@@ -302,6 +304,7 @@
                                     <td>{{ $user['leads'] }}</td>
                                     <td>{{ $user['overload'] }}</td>
                                     <td>{{ $user['success_period'] }}</td>
+                                    <td>{{ $user['partly_payed'] }}</td>
                                     <td>{{ $user['closed_period'] }}</td>
                                     <td>{{ $user['deffered'] }}</td>
                                     <td>{{ $user['success'] }}</td>
@@ -545,7 +548,7 @@
 
                     <?php foreach ($conversions['man'] as $name => $user):
 //                    $xonv = $user['success'] / ($user['leads'] - $user['overload']) * 100;
-                    if ($user['leads'] > 0)
+                    if ($user['leads'] > 0 and $user['leads'] > $user['overload'])
                     {
                         $xonv = $user['success_period'] / ($user['leads'] - $user['overload']) * 100;
                     } else

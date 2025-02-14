@@ -24,6 +24,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Reverb\Loggers\Log;
 
+
+
+//TODO: Запрет на большие периоды
 class ReportService
 {
 
@@ -167,11 +170,35 @@ class ReportService
                             $common['closed_period']++;
                         }
                         if ($sid == 142) {
-                            if (Carbon::parse($lead->getClosedAt())->between(Carbon::parse($from_first), Carbon::parse($to_first)))
-                                {
-                                    $man[$user]['success_period']++;
-                                    $common['success_period']++;
+                            if (Carbon::parse($lead->getClosedAt())->between(Carbon::parse($from_first.' 00:00'), Carbon::parse($to_first.' 23:59')))
+                            {
+                                $man[$user]['success_period']++;
+                                $common['success_period']++;
+                            }
+                        }
+                        if ($sid == 32533201 or $sid == 32533204)
+                        {
+                            $leadNotesService = $apiClient->events();
+
+                            $ef = new \AmoCRM\Filters\EventsFilter();
+                            $ef->setEntity([EntityTypesInterface::LEADS])->setEntityIds([$lead->getId()])->setTypes(['lead_status_changed']);
+                            try {
+                                $events = $apiClient->events()->get($ef);
+                                foreach ($events as $e) {
+                                    /** @var \AmoCRM\Models\EventModel $e */
+                                    if (in_array($e->getValueAfter()[0]['lead_status']['id'], [32533201, 32533204])) {
+                                        if (Carbon::parse($e->getCreatedAt())->between(Carbon::parse($from_first.' 00:00'), Carbon::parse($to_first. '23:59')))
+                                        {
+                                            $man[$user]['success_period']++;
+                                            $common['success_period']++;
+                                            ReportTrait::incrementOrSet($man[$user]['partly_payed']);
+                                            ReportTrait::incrementOrSet($common['partly_payed']);
+                                            break;
+                                        }
+                                    }
                                 }
+                            } catch (Exception $exception) {
+                            }
                         }
 
 
@@ -260,7 +287,7 @@ class ReportService
 
         }
         $lf2 = new LeadsFilter();
-        $lf2->setClosedAt((new \AmoCRM\Filters\BaseRangeFilter())->setFrom(\Carbon\Carbon::parse($from_first)->timestamp)->setTo(\Carbon\Carbon::parse($to_first . ' 23:59')->timestamp));
+        $lf2->setClosedAt((new \AmoCRM\Filters\BaseRangeFilter())->setFrom(\Carbon\Carbon::parse($from_first.' 00:00')->timestamp)->setTo(\Carbon\Carbon::parse($to_first . ' 23:59')->timestamp));
         $lf2->setLimit(200);
         $i = 1;
         $pr = 40;
@@ -353,52 +380,73 @@ class ReportService
                             }
                         } elseif ($lead->getStatusId() == 143) {
                             $csfv = $lead->getCustomFieldsValues();
+                            $po_vopr_obuch = false;
+
                             if (!$csfv) {
                                 $salesT[$user][date('d M', $lead->closedAt)]['closed']++;
                                 $man[$user]['closed']++;
                                 $common['closed']++;
                             } else {
                                 $cn = $csfv->getBy("fieldid", 644641);
-                                $po_vopr_obuch = false;
                                 if ($cn) {
                                     try {
                                         $cn = $cn->getValues()->first()->getValue();
-                                        $man[$user]['necelevoy'][$cn]++;
-                                        $common['necelevoy'][$cn]++;
-                                        if ($cn == 'Слушатель по вопросу обучения') {
+                                        ReportTrait::incrementOrSet($man[$user]['necelevoy'][$cn]);
+                                        ReportTrait::incrementOrSet($common['necelevoy'][$cn]);
+                                        if (trim($cn) == 'Слушатель по вопросу обучения') {
+
+                                            $salesT[$user][date('d M', $lead->closedAt)]['closed']++;
+                                            $man[$user]['closed']++;
+                                            $common['closed']++;
                                             $po_vopr_obuch = true;
+                                            $man[$user]['overload']++;
+                                            $common['overload']++;
+                                            $man[$user]['reasons']["Слушатель по вопросу обучения"] = isset($man[$user]['reasons']["Слушатель по вопросу обучения"]) ? $man[$user]['reasons']["Слушатель по вопросу обучения"] + 1 : 0;
+                                            $common['reasons']["Слушатель по вопросу обучения"] = isset($common['reasons']["Слушатель по вопросу обучения"]) ? $common['reasons']["Слушатель по вопросу обучения"] + 1 : 0;
+
                                         }
                                     } catch (Exception $e) {
                                     }
                                 }
-                                if ($c = $csfv->getBy("fieldid", 644039)) {
-                                    try {
-                                        if ($c = $c->getValues()->first()->getValue()) {
-                                            ReportTrait::incrementOrSet($man[$user]['reasons'][$c]);
-                                            ReportTrait::incrementOrSet($common['reasons'][$c]);
-                                            if (!in_array($c, ['Дубль', 'Ошиблись номером', 'Уже обучается']) and !$po_vopr_obuch) {
-                                                $salesT[$user][date('d M', $lead->closedAt)]['closed']++;
-                                                $man[$user]['closed']++;
-                                                $common['closed']++;
-                                            } else {
-                                                $man[$user]['overload']++;
-                                                $common['overload']++;
-                                                $man[$user]['closed_types'][$c]++;
-                                                $common['closed_types'][$c]++;
+                                if (!$po_vopr_obuch) {
+                                    if ($c = $csfv->getBy("fieldid", 644039)) {
+                                        try {
+                                            if ($c = $c->getValues()->first()->getValue()) {
+                                                ReportTrait::incrementOrSet( $man[$user]['reasons'][$c]);
+                                                ReportTrait::incrementOrSet( $common['reasons'][$c]);
+
+                                                if (!in_array($c, ['Дубль', 'Ошиблись номером', 'Уже обучается'])) {
+                                                    $salesT[$user][date('d M', $lead->closedAt)]['closed']++;
+                                                    $man[$user]['closed']++;
+                                                    $common['closed']++;
+                                                } else {
+
+                                                    $man[$user]['overload']++;
+                                                    $common['overload']++;
+                                                    ReportTrait::incrementOrSet($man[$user]['closed_types'][$c]);
+                                                    ReportTrait::incrementOrSet($common['closed_types'][$c]);
+                                                }
                                             }
+                                        } catch (AmoCRMApiException $e)
+                                        {
+                                            $salesT[$user][date('d M', $lead->closedAt)]['closed']++;
+                                            $man[$user]['closed']++;
+                                            $common['closed']++;
+                                        }  catch (Exception $e) {
+                                            \Illuminate\Support\Facades\Log::error("Error: ". print_r($e->getMessage(), 1));
+                                            $salesT[$user][date('d M', $lead->closedAt)]['closed']++;
+                                            $man[$user]['closed']++;
+                                            $common['closed']++;
                                         }
-                                    } catch (Exception $e) {
+
+                                    } else {
+
+                                        $man[$user]['reasons']["Без причины"] = isset($man[$user]['reasons']["Без причины"]) ? $man[$user]['reasons']["Без причины"] + 1 : 0;
+                                        $common['reasons']["Без причины"] = isset($common['reasons']["Без причины"]) ? $common['reasons']["Без причины"] + 1 : 0;
                                         $salesT[$user][date('d M', $lead->closedAt)]['closed']++;
                                         $man[$user]['closed']++;
                                         $common['closed']++;
                                     }
-
-                                } else {
-                                    $man[$user]['reasons']["Без причины"] = isset($man[$user]['reasons']["Без причины"]) ? $man[$user]['reasons']["Без причины"] + 1 : 0;
-                                    $common['reasons']["Без причины"] = isset($common['reasons']["Без причины"]) ? $common['reasons']["Без причины"] + 1 : 0;
-                                    $salesT[$user][date('d M', $lead->closedAt)]['closed']++;
-                                    $man[$user]['closed']++;
-                                    $common['closed']++;
                                 }
                             }
 
@@ -829,6 +877,109 @@ class ReportService
             ksort($time);
             $tt[$type] = $time;
         }
+        try {
+            $stats = [];
+            $lf = new \AmoCRM\Filters\LeadsFilter();
+
+            $lf->setStatuses([
+                [
+                    'status_id' => 36592555,
+                    'pipeline_id' => Pipelines::RETAIL
+                ]
+            ]);
+            $i = 1;
+            $lf->setLimit(200);
+            $lf->setPage($i);
+
+
+            $stats = [
+                'period' => [
+                    'sites' => [],
+                    'sources' => [],
+                ],
+                'all' => [
+                    'sites' => [],
+                    'sources' => [],
+                ]
+            ];
+            $co = 200;
+
+            $sites = [
+                'mzpo-s.ru',
+                'mirk.msk.ru',
+                'ucheba.ru',
+                'mzpo.education',
+                'mzpokurs.com',
+                'cruche-academy.ru',
+            ];
+
+            $tags_base = [
+                'Барабан',
+                'JivoSite',
+                'UIS',
+                'vkontakte',
+                'telegram',
+                'tilda'
+            ];
+
+            do {
+                $lf->setPage($i++);
+                $leads = $apiClient->leads()->get($lf);
+                $co = $leads->count();
+
+                foreach ($leads as $lead)
+                {
+                    $tags = [];
+                    $found = false;
+                    $other = true;
+                    foreach ($lead->getTags() as $tag)
+                    {
+                        $tags[] = $tag->getName();
+                        if (in_array($tag->getName(), $tags_base))
+                        {
+                            if (isset($stats['all']['sources'][$tag->getName()])) {  $stats['all']['sources'][$tag->getName()]++; }
+                            else  $stats['all']['sources'][$tag->getName()] = 1;
+                            if (\Carbon\Carbon::parse($lead->createdAt)->between(\Carbon\Carbon::parse($from_first . " 00:00"), \Carbon\Carbon::parse($to_first . " 23:59"))) {
+                                if (isset($stats['period']['sources'][$tag->getName()])) {  $stats['period']['sources'][$tag->getName()]++; }
+                                else  $stats['period']['sources'][$tag->getName()] = 1;
+                            }
+                            $found = true;
+                        }
+                    }
+                    foreach ($sites as $site)
+                    {
+                        if (in_array($site, $tags))
+                        {
+                            if (\Carbon\Carbon::parse($lead->createdAt)->between(\Carbon\Carbon::parse($from_first . " 00:00"), \Carbon\Carbon::parse($to_first . " 23:59"))) {
+                                ReportTrait::incrementOrSet($stats['period']['sites'][$site]);
+                            }
+                            ReportTrait::incrementOrSet($stats['all']['sites'][$site]);
+                            if (!$found)
+                            {
+                                if (\Carbon\Carbon::parse($lead->createdAt)->between(\Carbon\Carbon::parse($from_first . " 00:00"), \Carbon\Carbon::parse($to_first . " 23:59"))) {
+                                    ReportTrait::incrementOrSet($stats['period']['sources']["Заявка с сайта"]);
+
+                                }
+                                ReportTrait::incrementOrSet($stats['all']['sources']["Заявка с сайта"]);
+                            }
+                            $other = false;
+                            break;
+                        }
+                    }
+                    if ($other)
+                    {
+                        if (\Carbon\Carbon::parse($lead->createdAt)->between(\Carbon\Carbon::parse($from_first . " 00:00"), \Carbon\Carbon::parse($to_first . " 23:59"))) {
+                            ReportTrait::incrementOrSet($stats['period']['sources']["Прочее"]);
+                        }
+                        ReportTrait::incrementOrSet($stats['all']['sources']["Прочее"]);
+                    }
+                }
+            } while($co == 200);
+
+        } catch (Exception $e) {
+//            dd($e);
+        }
+
         $res = [
             'pipes' => $pipes,
             'mans' => $managers,
@@ -845,7 +996,8 @@ class ReportService
             'timestage_times' => $tt,
             'kval' => $kval,
             'utm' => $utm,
-            'utm_kval' => $kval_utm
+            'utm_kval' => $kval_utm,
+            'nedozvon' => $stats
         ];
         if ($report) {
             $report->update([

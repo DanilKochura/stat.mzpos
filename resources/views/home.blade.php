@@ -123,6 +123,11 @@
                                aria-controls="postsales"
                                aria-selected="false">Допродажи</a>
                         </li>
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link" id="nedozvon-tab" data-toggle="tab" href="#nedozvon" role="tab"
+                               aria-controls="nedozvon"
+                               aria-selected="false">Недозвоны</a>
+                        </li>
                     </ul>
                     @if($objects)
                         <div class="tab-content" id="myTabContent1">
@@ -536,6 +541,7 @@
                                 @include('conversions')
                             </div>
                             @include('postsales')
+                            @include('nedozvon')
 
                         </div>
 
